@@ -1,4 +1,4 @@
-import React, { useState, FormEvent, useEffect } from 'react'
+import React, { useState, useEffect, type FormEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuestion } from '@/hooks/useQuestion'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
@@ -25,7 +25,7 @@ export const QuestionDetail: React.FC = () => {
 
   useEffect(() => {
     if (question) {
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+       
       setFormData({
         recognized_text: question.recognized_text,
         subject: question.subject,

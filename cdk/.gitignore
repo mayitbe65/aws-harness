@@ -1,0 +1,38 @@
+# General
+*.js
+*.d.ts
+*.d.ts.map
+node_modules/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CDK
+cdk.out/
+*.asset.json
+tree.json
+
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/

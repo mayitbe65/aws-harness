@@ -4,6 +4,9 @@ import { AuthProvider } from '@/context/AuthContext'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { QuestionDetail } from '@/pages/QuestionDetail'
+import { PhotoUpload } from '@/pages/PhotoUpload'
+import { ReviewPlan } from '@/pages/ReviewPlan'
+import { Export } from '@/pages/Export'
 
 export const App: React.FC = () => {
   return (
@@ -12,7 +15,10 @@ export const App: React.FC = () => {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<Dashboard />} />
+          <Route path="/upload" element={<PhotoUpload />} />
           <Route path="/question/:id" element={<QuestionDetail />} />
+          <Route path="/review" element={<ReviewPlan />} />
+          <Route path="/export" element={<Export />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

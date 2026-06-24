@@ -21,7 +21,7 @@ export const useQuestion = (questionId: string) => {
     }
   }, [questionId])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     // Data fetching effect - calling setState in effect is intentional pattern
     void fetch()

@@ -1,4 +1,4 @@
-/* eslint-disable-next-line no-console */
+ 
 import { useState, useEffect, useCallback } from 'react'
 import type { Question } from '@/types/models'
 import { questionService } from '@/services/question'
@@ -33,7 +33,7 @@ export const useQuestions = (options: UseQuestionsOptions = {}) => {
     }
   }, [page, pageSize, subject, needsReviewOnly])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     void fetch()
   }, [fetch])

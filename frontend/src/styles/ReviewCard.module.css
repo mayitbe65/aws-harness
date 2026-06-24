@@ -1,0 +1,108 @@
+.card {
+  background-color: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.card:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.card.selected {
+  border-color: #667eea;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.25);
+  background-color: #f8f9ff;
+}
+
+.image {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  background-color: #f0f0f0;
+}
+
+.content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.meta span {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.priority {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.difficulty {
+  display: flex;
+  justify-content: space-between;
+}
+
+.errors {
+  display: flex;
+  justify-content: space-between;
+}
+
+.schedule {
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 500;
+  text-align: center;
+  border: 1px solid #e0e0e0;
+}
+
+.card.selected .schedule {
+  background-color: #e8eaff;
+  border-color: #667eea;
+}
+
+@media (max-width: 768px) {
+  .image {
+    height: 150px;
+  }
+
+  .content {
+    padding: 12px;
+  }
+
+  .text {
+    font-size: 13px;
+  }
+}
