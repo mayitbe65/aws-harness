@@ -1,0 +1,157 @@
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.container h1 {
+  font-size: 28px;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.image {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  background-color: #f0f0f0;
+}
+
+.error {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c33;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.group input[type="text"],
+.group input[type="range"],
+.group select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.group select {
+  background-color: white;
+  cursor: pointer;
+}
+
+.group input[type="range"] {
+  padding: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.group input[type="range"] + span {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.textarea {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.group input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+.group label:has(input[type="checkbox"]) {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.actions button {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.actions button:first-child {
+  background-color: #667eea;
+  color: white;
+}
+
+.actions button:first-child:hover:not(:disabled) {
+  background-color: #5568d3;
+}
+
+.actions button:first-child:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.actions button:nth-child(2) {
+  background-color: #f44336;
+  color: white;
+}
+
+.actions button:nth-child(2):hover {
+  background-color: #da190b;
+}
+
+.actions button:nth-child(3) {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.actions button:nth-child(3):hover {
+  background-color: #e0e0e0;
+}
