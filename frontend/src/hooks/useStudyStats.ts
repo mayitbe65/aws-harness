@@ -1,9 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useCallback } from 'react'
-import {
-  recommendationService,
-  StudyStatsResponse,
-} from '@/services/recommendation'
+import type { StudyStatsResponse } from '@/services/recommendation'
+import { recommendationService } from '@/services/recommendation'
 
 export const useStudyStats = () => {
   const [stats, setStats] = useState<StudyStatsResponse | null>(null)

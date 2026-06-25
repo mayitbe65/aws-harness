@@ -23,7 +23,7 @@ class GUID(TypeDecorator):
             return None
         if isinstance(value, PyUUID):
             return value.hex
-        return value
+        return PyUUID(value).hex
 
     def process_result_value(self, value, dialect):
         if value is None:

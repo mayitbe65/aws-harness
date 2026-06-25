@@ -1,5 +1,6 @@
 """Unit tests for authentication endpoints."""
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from uuid import uuid4
 
@@ -9,21 +10,27 @@ from src.models.user import User, UserRole
 from src.database.db import async_session_maker
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_user():
     """Create a test user in the database."""
     user_id = str(uuid4())
+    email = f"student_{user_id[:8]}@test.edu"
     async with async_session_maker() as session:
         user = User(
             user_id=user_id,
-            email="student@test.edu",
+            email=email,
             password_hash=hash_password("Password123"),
             role=UserRole.STUDENT,
             name="Test Student",
         )
         session.add(user)
         await session.commit()
-    return user_id, "student@test.edu", "Password123"
+    yield user_id, email, "Password123"
+    async with async_session_maker() as session:
+        from sqlalchemy import delete
+        from src.models.user import User as UserModel
+        await session.execute(delete(UserModel).where(UserModel.user_id == user_id))
+        await session.commit()
 
 
 @pytest.mark.asyncio

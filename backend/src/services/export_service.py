@@ -58,7 +58,7 @@ class ExportService:
                     for q_id in question_ids:
                         # Validate it's a valid UUID format
                         UUID(q_id)
-                        validated_ids.append(q_id)
+                        validated_ids.append(q_id.replace("-", ""))
                 except (ValueError, TypeError) as e:
                     raise ValueError(f"Invalid question ID format: {e}")
 
@@ -119,6 +119,8 @@ class ExportService:
 
                 db.add(snapshot)
                 await db.flush()
+
+                snapshot.snapshot_id = UUID(snapshot.snapshot_id)
 
                 logger.info(
                     f"Created snapshot {snapshot.snapshot_id} with "

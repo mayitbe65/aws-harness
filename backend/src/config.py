@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: str = "/path/to/credentials.json"
     VISION_API_TIMEOUT_SECONDS: int = 5
 
+    # Admin 默认账号（生产环境请在 .env 中覆盖）
+    ADMIN_EMAIL: str = "admin@school.edu"
+    ADMIN_PASSWORD: str = "Admin123456!"
+    ADMIN_NAME: str = "系统管理员"
+
     # App
     APP_ENV: str = "development"
     APP_DEBUG: bool = False

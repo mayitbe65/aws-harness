@@ -1,0 +1,18 @@
+# 错题宝 AWS 部署信息
+
+部署日期: Wed Jun 24 11:09:43 UTC 2026
+AWS 账户: 471112989161
+AWS 区域: us-east-1
+
+## 前端
+S3 桶: error-qa-frontend-1782299377
+CloudFront 分布 ID: 
+CloudFront URL: https://
+
+## 后端
+URL: http://localhost:8000
+状态: ⚠️ 需要手动启动
+
+## 登录凭证
+Email: student@test.edu
+Password: Password123

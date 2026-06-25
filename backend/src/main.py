@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.config import settings
 from src.database import init_db, close_db
+from src.database.seed import seed_admin
 from src.routers import auth, questions, recognition, recommendations, export
 
 app = FastAPI(title="错题宝 API", version="1.0.0")
@@ -27,6 +28,7 @@ app.add_middleware(
 async def startup_event():
     """Initialize database on application startup."""
     await init_db()
+    await seed_admin()
 
 
 @app.on_event("shutdown")

@@ -11,6 +11,19 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: '0.0.0.0',
+    middlewareMode: false,
+    hmr: {
+      host: 'localhost',
+      port: 5173,
+      protocol: 'http',
+    },
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'd1vc0y0etec2o0.cloudfront.net',
+      '*.cloudfront.net',
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

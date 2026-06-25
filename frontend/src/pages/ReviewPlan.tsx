@@ -16,7 +16,7 @@ export const ReviewPlan: React.FC = () => {
 
   const { data, isLoading, error, refetch } = useRecommendations(10)
   const { stats } = useStudyStats()
-  const { markReviewed, isLoading: isMarking } = useMarkReviewed()
+  const { markReviewed } = useMarkReviewed()
 
   const [selectedQuestionIdx, setSelectedQuestionIdx] = useState<number | null>(null)
 
