@@ -36,7 +36,7 @@ class Question(Base):
     # 题目来源和内容
     photo_url = Column(
         String(512),
-        nullable=False,
+        nullable=True,
     )  # S3 URL or local path
 
     recognized_text = Column(
@@ -89,20 +89,20 @@ class Question(Base):
     )
 
     last_error_time = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
     # Timestamps
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         index=True,
         nullable=False,
     )
 
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

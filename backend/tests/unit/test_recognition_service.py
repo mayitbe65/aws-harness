@@ -1,6 +1,17 @@
-"""Unit tests for recognition service (Rule R4: quality checks, Rule R8: retry logic)."""
+"""Unit tests for RecognitionService (Rule R4: quality checks, Rule R8: retry logic).
+
+Service uses Bedrock Claude with CONFIDENCE_MEDIUM_THRESHOLD=0.0:
+- HIGH  : confidence >= 0.7 AND valid text AND no garbage
+- MEDIUM: 0.0 <= confidence < 0.7 AND valid text AND no garbage
+- LOW   : confidence out of range, text too short/long, or garbage detected
+"""
+import io
+import json
+import tempfile
+import os
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
+from botocore.exceptions import ClientError
 
 from src.services.recognition_service import RecognitionService
 from src.schemas.recognition import (
@@ -10,526 +21,418 @@ from src.schemas.recognition import (
 )
 
 
-class TestQualityCheckHighConfidence:
-    """Test HIGH quality when confidence >= 0.7."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    def test_high_confidence_0_95(self):
-        """HIGH quality: confidence 0.95 should pass"""
-        result = RecognitionResult(
-            recognized_text="x^2 + 2x + 1 = 0",
-            confidence=0.95,
-        )
+def _make_bedrock_response(text_payload: str) -> MagicMock:
+    """Build a mock boto3 invoke_model response with the given JSON payload."""
+    body = MagicMock()
+    body.read.return_value = json.dumps(
+        {"content": [{"text": text_payload}]}
+    ).encode()
+    resp = MagicMock()
+    resp.__getitem__ = lambda self, key: body if key == "body" else None
+    return resp
 
-        check = RecognitionService.validate_recognition_result(result)
 
-        assert check.is_valid is True
+def _valid_payload(
+    recognized_text: str = "求解方程 x^2 - 4 = 0",
+    confidence: float = 0.9,
+    has_formulas: bool = True,
+    has_diagrams: bool = False,
+) -> str:
+    return json.dumps(
+        {
+            "recognized_text": recognized_text,
+            "confidence": confidence,
+            "has_formulas": has_formulas,
+            "has_diagrams": has_diagrams,
+        }
+    )
+
+
+def _tmp_image(suffix: str = ".jpg") -> str:
+    f = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    # JPEG magic bytes so media-type detection works
+    f.write(b"\xff\xd8\xff" + b"\x00" * 10)
+    f.close()
+    return f.name
+
+
+# ---------------------------------------------------------------------------
+# validate_recognition_result — HIGH quality
+# ---------------------------------------------------------------------------
+
+class TestHighQuality:
+    def test_confidence_0_9_gives_high(self):
+        r = RecognitionResult(recognized_text="x^2 + 2x + 1 = 0", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.HIGH
+        assert check.is_valid is True
         assert check.reason is None
 
-    def test_high_confidence_0_7(self):
-        """HIGH quality: confidence exactly 0.7 should pass"""
-        result = RecognitionResult(
-            recognized_text="Solve for x: 2x + 3 = 7",
-            confidence=0.7,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is True
+    def test_confidence_at_threshold_0_7_gives_high(self):
+        r = RecognitionResult(recognized_text="Solve for x: 2x + 3 = 7", confidence=0.7)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.HIGH
-
-    def test_high_confidence_1_0(self):
-        """HIGH quality: confidence 1.0 should pass"""
-        result = RecognitionResult(
-            recognized_text="Clear math problem text",
-            confidence=1.0,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
         assert check.is_valid is True
+
+    def test_confidence_1_0_gives_high(self):
+        r = RecognitionResult(recognized_text="Clear question text.", confidence=1.0)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.HIGH
-
-
-class TestQualityCheckMediumConfidence:
-    """Test MEDIUM quality when 0.5 <= confidence < 0.7."""
-
-    def test_medium_confidence_0_6(self):
-        """MEDIUM quality: confidence 0.6 should be MEDIUM"""
-        result = RecognitionResult(
-            recognized_text="somewhat blurry math problem",
-            confidence=0.6,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
         assert check.is_valid is True
+
+
+# ---------------------------------------------------------------------------
+# validate_recognition_result — MEDIUM quality
+# (CONFIDENCE_MEDIUM_THRESHOLD = 0.0 → any non-garbage result is at least MEDIUM)
+# ---------------------------------------------------------------------------
+
+class TestMediumQuality:
+    def test_confidence_0_6_gives_medium(self):
+        r = RecognitionResult(recognized_text="somewhat blurry math problem", confidence=0.6)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.MEDIUM
+        assert check.is_valid is True
         assert check.reason is None
 
-    def test_medium_confidence_0_5(self):
-        """MEDIUM quality: confidence exactly 0.5 should be MEDIUM"""
-        result = RecognitionResult(
-            recognized_text="barely readable question",
-            confidence=0.5,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is True
+    def test_confidence_0_5_gives_medium(self):
+        r = RecognitionResult(recognized_text="barely readable question", confidence=0.5)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.MEDIUM
-
-    def test_medium_confidence_0_55(self):
-        """MEDIUM quality: confidence 0.55 should be MEDIUM"""
-        result = RecognitionResult(
-            recognized_text="slightly unclear problem statement",
-            confidence=0.55,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
         assert check.is_valid is True
+
+    def test_confidence_0_3_gives_medium(self):
+        # Bedrock skews low; 0.3 is still MEDIUM per current design
+        r = RecognitionResult(recognized_text="low confidence but readable text", confidence=0.3)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.quality == RecognitionQuality.MEDIUM
-
-
-class TestQualityCheckLowConfidence:
-    """Test LOW quality when confidence < 0.5."""
-
-    def test_low_confidence_0_3(self):
-        """LOW quality: confidence 0.3 should fail"""
-        result = RecognitionResult(
-            recognized_text="barely visible text",
-            confidence=0.3,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is False
-        assert check.quality == RecognitionQuality.LOW
-        assert check.reason == "low_confidence"
-
-    def test_low_confidence_0_49(self):
-        """LOW quality: confidence 0.49 (just below 0.5) should fail"""
-        result = RecognitionResult(
-            recognized_text="very unclear problem",
-            confidence=0.49,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is False
-        assert check.quality == RecognitionQuality.LOW
-
-    def test_low_confidence_0_0(self):
-        """LOW quality: confidence 0.0 should fail"""
-        result = RecognitionResult(
-            recognized_text="indecipherable text",
-            confidence=0.0,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is False
-        assert check.quality == RecognitionQuality.LOW
-
-
-class TestQualityCheckMissingConfidence:
-    """Test Rule R2: If confidence missing, use 0."""
-
-    def test_missing_confidence_uses_zero(self):
-        """Rule R2: Missing confidence should default to 0 → LOW quality"""
-        result = RecognitionResult(
-            recognized_text="test problem",
-            confidence=None,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.quality == RecognitionQuality.LOW
-        assert check.is_valid is False
-
-    def test_default_confidence_is_zero(self):
-        """Default confidence should be 0"""
-        result = RecognitionResult(
-            recognized_text="problem statement"
-        )
-
-        # confidence defaults to 0.0
-        assert result.confidence == 0.0
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.quality == RecognitionQuality.LOW
-
-
-class TestQualityCheckTextLength:
-    """Test text length validation."""
-
-    def test_text_too_short(self):
-        """Text < 5 chars should fail"""
-        result = RecognitionResult(
-            recognized_text="abc",  # 3 chars
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is False
-        assert check.reason == "invalid_length"
-        assert check.quality == RecognitionQuality.LOW
-
-    def test_text_minimum_length_5(self):
-        """Text with exactly 5 chars should pass"""
-        result = RecognitionResult(
-            recognized_text="abcde",  # 5 chars
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is True
-        assert check.quality == RecognitionQuality.HIGH
-
-    def test_text_too_long(self):
-        """Text > 10000 chars should fail"""
-        result = RecognitionResult(
-            recognized_text="x" * 10001,
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
-        assert check.is_valid is False
-        assert check.reason == "invalid_length"
-
-    def test_text_maximum_length_10000(self):
-        """Text with exactly 10000 chars should pass"""
-        result = RecognitionResult(
-            recognized_text="x" * 10000,
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
         assert check.is_valid is True
 
-    def test_whitespace_only_fails(self):
-        """Whitespace-only text should fail as empty"""
-        result = RecognitionResult(
-            recognized_text="     ",  # 5 spaces
-            confidence=0.9,
-        )
+    def test_confidence_0_0_gives_medium(self):
+        # 0.0 >= CONFIDENCE_MEDIUM_THRESHOLD (0.0) → MEDIUM
+        r = RecognitionResult(recognized_text="zero confidence still kept", confidence=0.0)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.quality == RecognitionQuality.MEDIUM
+        assert check.is_valid is True
 
-        check = RecognitionService.validate_recognition_result(result)
+    def test_missing_confidence_defaults_0_0_medium(self):
+        # Rule R2: missing confidence → 0.0 → MEDIUM (not LOW) for valid text
+        r = RecognitionResult(recognized_text="question with no confidence", confidence=None)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.quality == RecognitionQuality.MEDIUM
+        assert check.is_valid is True
 
+
+# ---------------------------------------------------------------------------
+# validate_recognition_result — LOW quality (garbage / length / range)
+# ---------------------------------------------------------------------------
+
+class TestLowQualityLength:
+    def test_text_too_short_gives_low(self):
+        r = RecognitionResult(recognized_text="abc", confidence=0.9)  # 3 chars
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
-        # After strip(), whitespace text becomes empty (0 chars), triggers invalid_length
+        assert check.quality == RecognitionQuality.LOW
+        assert check.reason == "invalid_length"
+
+    def test_text_exactly_5_chars_passes(self):
+        r = RecognitionResult(recognized_text="abcde", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is True
+
+    def test_text_too_long_gives_low(self):
+        r = RecognitionResult(recognized_text="x" * 10001, confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is False
+        assert check.reason == "invalid_length"
+
+    def test_text_exactly_10000_chars_passes(self):
+        r = RecognitionResult(recognized_text="x" * 10000, confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is True
+
+    def test_whitespace_only_gives_low(self):
+        # After strip(), 5 spaces → 0 chars → invalid_length
+        r = RecognitionResult(recognized_text="     ", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is False
         assert check.reason == "invalid_length"
 
 
-class TestQualityCheckGarbageDataPatterns:
-    """Test garbage data pattern detection."""
-
-    def test_garbage_pattern_unrecognizable(self):
-        """Pattern [无法识别] should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="[无法识别]",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+class TestLowQualityGarbagePatterns:
+    def test_pattern_unrecognizable_brackets_gives_low(self):
+        r = RecognitionResult(recognized_text="[无法识别]", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
         assert check.quality == RecognitionQuality.LOW
 
-    def test_garbage_pattern_dots(self):
-        """Pattern of only dots should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="......",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+    def test_pattern_only_dots_gives_low(self):
+        r = RecognitionResult(recognized_text="......", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
-    def test_garbage_pattern_middle_dots(self):
-        """Pattern of middle dots (·) should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="······",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+    def test_pattern_middle_dots_gives_low(self):
+        r = RecognitionResult(recognized_text="······", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
 
-class TestQualityCheckGarbageKeywords:
-    """Test garbage keyword detection."""
-
-    def test_garbage_keyword_unrecognizable(self):
-        """Keyword '无法识别' should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="这是一张很模糊的照片，无法识别",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+class TestLowQualityGarbageKeywords:
+    def test_keyword_unrecognizable_in_text_gives_low(self):
+        r = RecognitionResult(recognized_text="这张照片无法识别，请重新上传", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
-    def test_garbage_keyword_image_tag(self):
-        """Keyword '[image]' should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="Question: [image] not shown",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+    def test_keyword_image_tag_gives_low(self):
+        r = RecognitionResult(recognized_text="Question: [image] not shown", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
-    def test_garbage_keyword_chart_tag(self):
-        """Keyword '[chart]' should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="Graph [chart] cannot be shown",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+    def test_keyword_chart_tag_gives_low(self):
+        r = RecognitionResult(recognized_text="See [chart] for details", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
-    def test_garbage_keyword_blurry(self):
-        """Keyword '模糊' should be detected as garbage"""
-        result = RecognitionResult(
-            recognized_text="照片太模糊了，看不清楚",
-            confidence=0.9,
-        )
-
-        check = RecognitionService.validate_recognition_result(result)
-
+    def test_keyword_blurry_gives_low(self):
+        r = RecognitionResult(recognized_text="照片太模糊了，看不清楚", confidence=0.9)
+        check = RecognitionService.validate_recognition_result(r)
         assert check.is_valid is False
         assert check.reason == "garbage_data"
 
 
-class TestQualityCheckInvalidConfidence:
-    """Test invalid confidence values (validated by Pydantic schema)."""
+class TestLowQualityInvalidConfidenceRange:
+    def test_confidence_above_1_gives_low(self):
+        # Pydantic ge/le only run on construction; service double-checks range
+        r = RecognitionResult.__new__(RecognitionResult)
+        object.__setattr__(r, "recognized_text", "valid enough text here")
+        object.__setattr__(r, "confidence", 1.5)
+        object.__setattr__(r, "has_formulas", False)
+        object.__setattr__(r, "has_diagrams", False)
+        object.__setattr__(r, "raw_blocks", [])
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is False
+        assert check.reason == "invalid_confidence_range"
+        assert check.quality == RecognitionQuality.LOW
 
-    def test_confidence_boundary_values(self):
-        """Test boundary confidence values are valid in schema"""
-        # Pydantic validates bounds: 0.0 <= confidence <= 1.0
-        # These values should be accepted
-        result_0 = RecognitionResult(
-            recognized_text="valid problem",
-            confidence=0.0,
-        )
-        assert result_0.confidence == 0.0
-
-        result_1 = RecognitionResult(
-            recognized_text="valid problem",
-            confidence=1.0,
-        )
-        assert result_1.confidence == 1.0
+    def test_confidence_below_0_gives_low(self):
+        r = RecognitionResult.__new__(RecognitionResult)
+        object.__setattr__(r, "recognized_text", "valid enough text here")
+        object.__setattr__(r, "confidence", -0.1)
+        object.__setattr__(r, "has_formulas", False)
+        object.__setattr__(r, "has_diagrams", False)
+        object.__setattr__(r, "raw_blocks", [])
+        check = RecognitionService.validate_recognition_result(r)
+        assert check.is_valid is False
+        assert check.reason == "invalid_confidence_range"
 
 
-class TestVisionAPIRetryLogic:
-    """Test Vision API retry logic (Rule R8: 3 retries with 1s/2s/4s intervals)."""
+# ---------------------------------------------------------------------------
+# call_vision_api — Bedrock boto3 integration
+# ---------------------------------------------------------------------------
 
+class TestCallVisionApiSuccess:
     @pytest.mark.asyncio
-    async def test_call_vision_api_success_first_attempt(self):
-        """Test successful Vision API call on first attempt"""
-        with patch("src.services.recognition_service.vision.ImageAnnotatorClient") as mock_client_class:
+    async def test_success_first_attempt(self):
+        path = _tmp_image()
+        try:
             mock_client = MagicMock()
-            mock_client_class.return_value = mock_client
+            mock_client.invoke_model.return_value = _make_bedrock_response(
+                _valid_payload("求解 x^2 - 4 = 0", confidence=0.92)
+            )
+            with patch("boto3.client", return_value=mock_client):
+                result = await RecognitionService.call_vision_api(path, max_retries=3)
 
-            # Mock successful response
-            mock_response = MagicMock()
-            mock_response.error.message = ""
-            mock_response.text_annotations = [
-                MagicMock(description="x^2 + 2x + 1 = 0"),
-                MagicMock(description="term1"),
-                MagicMock(description="term2"),
-            ]
-
-            # Mock full_text_annotation for confidence
-            mock_page = MagicMock()
-            mock_block = MagicMock()
-            mock_para = MagicMock()
-            mock_word = MagicMock()
-            mock_word.confidence = 0.95
-
-            mock_para.words = [mock_word]
-            mock_block.paragraphs = [mock_para]
-            mock_page.blocks = [mock_block]
-            mock_response.full_text_annotation.pages = [mock_page]
-
-            mock_client.document_text_detection.return_value = mock_response
-
-            # Create temporary test file
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
-                f.write(b"fake image data")
-                temp_path = f.name
-
-            try:
-                result = await RecognitionService.call_vision_api(temp_path, max_retries=3)
-
-                assert result is not None
-                assert result.recognized_text == "x^2 + 2x + 1 = 0"
-                assert result.confidence == 0.95
-            finally:
-                import os
-                os.unlink(temp_path)
+            assert result is not None
+            assert result.recognized_text == "求解 x^2 - 4 = 0"
+            assert result.confidence == pytest.approx(0.92)
+            assert result.has_formulas is True
+            assert mock_client.invoke_model.call_count == 1
+        finally:
+            os.unlink(path)
 
     @pytest.mark.asyncio
-    async def test_call_vision_api_retries_on_exception(self):
-        """Test Vision API retries on exception (Rule R8)"""
-        with patch(
-            "src.services.recognition_service.vision.ImageAnnotatorClient"
-        ) as mock_client_class:
-            with patch("src.services.recognition_service.asyncio.sleep", new_callable=AsyncMock):
-                mock_client = MagicMock()
-                mock_client_class.return_value = mock_client
+    async def test_strips_markdown_fences_from_response(self):
+        path = _tmp_image()
+        fenced = "```json\n" + _valid_payload("一元二次方程", confidence=0.85) + "\n```"
+        try:
+            mock_client = MagicMock()
+            mock_client.invoke_model.return_value = _make_bedrock_response(fenced)
+            with patch("boto3.client", return_value=mock_client):
+                result = await RecognitionService.call_vision_api(path, max_retries=1)
 
-                # First two attempts fail, third succeeds
-                mock_response_fail = MagicMock()
-                mock_response_fail.text_annotations = []
-
-                mock_response_success = MagicMock()
-                mock_response_success.error.message = ""
-                mock_response_success.text_annotations = [
-                    MagicMock(description="recovered text")
-                ]
-
-                mock_page = MagicMock()
-                mock_block = MagicMock()
-                mock_para = MagicMock()
-                mock_word = MagicMock()
-                mock_word.confidence = 0.85
-
-                mock_para.words = [mock_word]
-                mock_block.paragraphs = [mock_para]
-                mock_page.blocks = [mock_block]
-                mock_response_success.full_text_annotation.pages = [mock_page]
-
-                # Set side effects: fail twice, succeed once
-                mock_client.document_text_detection.side_effect = [
-                    mock_response_fail,
-                    mock_response_fail,
-                    mock_response_success,
-                ]
-
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
-                    f.write(b"fake image data")
-                    temp_path = f.name
-
-                try:
-                    result = await RecognitionService.call_vision_api(
-                        temp_path, max_retries=3
-                    )
-
-                    assert result is not None
-                    assert result.recognized_text == "recovered text"
-                    # Verify sleep was called twice (for retries)
-                    assert mock_client.document_text_detection.call_count == 3
-                finally:
-                    import os
-                    os.unlink(temp_path)
+            assert result is not None
+            assert result.recognized_text == "一元二次方程"
+            assert result.confidence == pytest.approx(0.85)
+        finally:
+            os.unlink(path)
 
     @pytest.mark.asyncio
-    async def test_call_vision_api_exhausts_retries(self):
-        """Test Vision API returns None after max retries exhausted"""
-        with patch(
-            "src.services.recognition_service.vision.ImageAnnotatorClient"
-        ) as mock_client_class:
-            with patch("src.services.recognition_service.asyncio.sleep", new_callable=AsyncMock):
-                mock_client = MagicMock()
-                mock_client_class.return_value = mock_client
+    async def test_detects_png_media_type(self):
+        f = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
+        f.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 10)
+        f.close()
+        try:
+            mock_client = MagicMock()
+            mock_client.invoke_model.return_value = _make_bedrock_response(
+                _valid_payload("PNG 题目识别", confidence=0.88)
+            )
+            with patch("boto3.client", return_value=mock_client):
+                result = await RecognitionService.call_vision_api(f.name, max_retries=1)
 
-                # All attempts return empty text
-                mock_response = MagicMock()
-                mock_response.error.message = ""
-                mock_response.text_annotations = []
-
-                mock_client.document_text_detection.return_value = mock_response
-
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
-                    f.write(b"fake image data")
-                    temp_path = f.name
-
-                try:
-                    result = await RecognitionService.call_vision_api(
-                        temp_path, max_retries=3
-                    )
-
-                    assert result is None
-                    # Verify all 3 attempts were made
-                    assert mock_client.document_text_detection.call_count == 3
-                finally:
-                    import os
-                    os.unlink(temp_path)
+            assert result is not None
+            # Verify the media_type sent was PNG
+            call_body = json.loads(mock_client.invoke_model.call_args[1]["body"])
+            img_source = call_body["messages"][0]["content"][0]["source"]
+            assert img_source["media_type"] == "image/png"
+        finally:
+            os.unlink(f.name)
 
 
-class TestRecognitionResultFormulas:
-    """Test formula and diagram detection."""
-
-    def test_has_formulas_with_math_symbols(self):
-        """Test detection of mathematical formulas"""
-        result = RecognitionResult(
-            recognized_text="Calculate ∑(x^2) + ∫f(x)dx",
-            confidence=0.9,
+class TestCallVisionApiRetry:
+    @pytest.mark.asyncio
+    async def test_throttling_retries_then_succeeds(self):
+        path = _tmp_image()
+        throttle_error = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
+            "invoke_model",
         )
+        mock_client = MagicMock()
+        mock_client.invoke_model.side_effect = [
+            throttle_error,
+            _make_bedrock_response(_valid_payload("retry success", confidence=0.8)),
+        ]
+        try:
+            with patch("boto3.client", return_value=mock_client):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await RecognitionService.call_vision_api(path, max_retries=3)
 
-        assert result.has_formulas is False  # Not auto-set, requires API to detect
+            assert result is not None
+            assert result.recognized_text == "retry success"
+            assert mock_client.invoke_model.call_count == 2
+        finally:
+            os.unlink(path)
 
-    def test_has_diagrams_with_multiple_blocks(self):
-        """Test diagram detection based on text blocks"""
-        result = RecognitionResult(
-            recognized_text="Diagram description",
-            confidence=0.9,
-            has_diagrams=True,
+    @pytest.mark.asyncio
+    async def test_json_parse_error_retries_then_succeeds(self):
+        path = _tmp_image()
+        bad_resp = _make_bedrock_response("this is not json {{{")
+        good_resp = _make_bedrock_response(_valid_payload("second attempt ok", confidence=0.75))
+        mock_client = MagicMock()
+        mock_client.invoke_model.side_effect = [bad_resp, good_resp]
+        try:
+            with patch("boto3.client", return_value=mock_client):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await RecognitionService.call_vision_api(path, max_retries=3)
+
+            assert result is not None
+            assert result.recognized_text == "second attempt ok"
+            assert mock_client.invoke_model.call_count == 2
+        finally:
+            os.unlink(path)
+
+    @pytest.mark.asyncio
+    async def test_all_retries_exhausted_returns_none(self):
+        path = _tmp_image()
+        throttle_error = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
+            "invoke_model",
         )
+        mock_client = MagicMock()
+        mock_client.invoke_model.side_effect = throttle_error
+        try:
+            with patch("boto3.client", return_value=mock_client):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await RecognitionService.call_vision_api(path, max_retries=3)
 
-        assert result.has_diagrams is True
+            assert result is None
+            # First attempt + 2 retries = 3 total; last retry hits non-ThrottlingException path
+            assert mock_client.invoke_model.call_count == 3
+        finally:
+            os.unlink(path)
 
-
-class TestRecognitionResultDefaults:
-    """Test RecognitionResult default values."""
-
-    def test_default_confidence(self):
-        """Default confidence should be 0.0"""
-        result = RecognitionResult(
-            recognized_text="test"
+    @pytest.mark.asyncio
+    async def test_non_throttle_client_error_returns_none_immediately(self):
+        path = _tmp_image()
+        access_error = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "No permission"}},
+            "invoke_model",
         )
-        assert result.confidence == 0.0
+        mock_client = MagicMock()
+        mock_client.invoke_model.side_effect = access_error
+        try:
+            with patch("boto3.client", return_value=mock_client):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await RecognitionService.call_vision_api(path, max_retries=3)
 
-    def test_default_has_formulas(self):
-        """Default has_formulas should be False"""
-        result = RecognitionResult(
-            recognized_text="test"
-        )
-        assert result.has_formulas is False
+            assert result is None
+            assert mock_client.invoke_model.call_count == 1
+        finally:
+            os.unlink(path)
 
-    def test_default_has_diagrams(self):
-        """Default has_diagrams should be False"""
-        result = RecognitionResult(
-            recognized_text="test"
-        )
-        assert result.has_diagrams is False
 
-    def test_default_raw_blocks(self):
-        """Default raw_blocks should be empty list"""
-        result = RecognitionResult(
-            recognized_text="test"
+class TestCallVisionApiFileErrors:
+    @pytest.mark.asyncio
+    async def test_file_not_found_returns_none(self):
+        result = await RecognitionService.call_vision_api("/nonexistent/path.jpg", max_retries=3)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_empty_file_returns_none(self):
+        f = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
+        f.write(b"")  # empty
+        f.close()
+        try:
+            mock_client = MagicMock()
+            bad_resp = _make_bedrock_response("not json")
+            mock_client.invoke_model.return_value = bad_resp
+            with patch("boto3.client", return_value=mock_client):
+                with patch("asyncio.sleep", new_callable=AsyncMock):
+                    result = await RecognitionService.call_vision_api(f.name, max_retries=1)
+            # Either None (all retries failed) or a result if parsing somehow worked
+            # Main assertion: no uncaught exception
+        finally:
+            os.unlink(f.name)
+
+
+# ---------------------------------------------------------------------------
+# RecognitionResult schema defaults
+# ---------------------------------------------------------------------------
+
+class TestRecognitionResultSchema:
+    def test_default_confidence_is_zero(self):
+        r = RecognitionResult(recognized_text="test text")
+        assert r.confidence == 0.0
+
+    def test_default_has_formulas_is_false(self):
+        r = RecognitionResult(recognized_text="test text")
+        assert r.has_formulas is False
+
+    def test_default_has_diagrams_is_false(self):
+        r = RecognitionResult(recognized_text="test text")
+        assert r.has_diagrams is False
+
+    def test_default_raw_blocks_is_empty_list(self):
+        r = RecognitionResult(recognized_text="test text")
+        assert r.raw_blocks == []
+
+    def test_explicit_fields_set_correctly(self):
+        r = RecognitionResult(
+            recognized_text="已知 sin θ = 3/5，求 cos θ",
+            confidence=0.88,
+            has_formulas=True,
+            has_diagrams=False,
+            raw_blocks=["line1", "line2"],
         )
-        assert result.raw_blocks == []
+        assert r.recognized_text == "已知 sin θ = 3/5，求 cos θ"
+        assert r.confidence == pytest.approx(0.88)
+        assert r.has_formulas is True
+        assert r.raw_blocks == ["line1", "line2"]

@@ -15,10 +15,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRY_HOURS: int = 1
 
-    # Vision API
-    GOOGLE_CLOUD_PROJECT: str
-    GOOGLE_APPLICATION_CREDENTIALS: str = "/path/to/credentials.json"
-    VISION_API_TIMEOUT_SECONDS: int = 5
+    # Bedrock
+    AWS_REGION: str = "us-east-1"
+    BEDROCK_MODEL_ID: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    VISION_API_TIMEOUT_SECONDS: int = 30
+
+    # S3
+    S3_BUCKET: str = "error-qa-frontend-1782299377"
+    S3_PHOTO_PREFIX: str = "photos"
 
     # Admin 默认账号（生产环境请在 .env 中覆盖）
     ADMIN_EMAIL: str = "admin@school.edu"

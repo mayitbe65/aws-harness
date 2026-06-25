@@ -11,6 +11,7 @@ interface RecognitionResultProps {
   onReset: () => void
 }
 
+
 export const RecognitionResult: React.FC<RecognitionResultProps> = ({
   result,
   onReset,
@@ -32,12 +33,8 @@ export const RecognitionResult: React.FC<RecognitionResultProps> = ({
     setError('')
 
     try {
-      // In production: upload photo to S3 first
-      // For now, use a placeholder URL
-      const mockPhotoUrl = `https://via.placeholder.com/300?text=${Date.now()}`
-
       await questionService.create({
-        photo_url: mockPhotoUrl,
+        photo_url: result.photo_url || undefined,
         recognized_text: editedText,
         confidence: result.result?.confidence || 0,
         subject,

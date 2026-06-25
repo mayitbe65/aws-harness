@@ -79,13 +79,13 @@ class User(Base):
 
     # Timestamps for audit trail
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
     )
 
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,

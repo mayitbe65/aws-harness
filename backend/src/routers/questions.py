@@ -6,6 +6,9 @@ from sqlalchemy import select, func, and_, update, delete
 from uuid import uuid4
 from datetime import datetime, timezone
 
+import boto3
+
+from src.config import settings
 from src.database.db import get_db
 from src.models.question import Question
 from src.models.review_plan import ReviewPlan
@@ -22,6 +25,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
 
+def _get_presigned_url(s3_url: str | None) -> str | None:
+    """Generate a presigned URL (1h TTL) for an S3 object URL."""
+    if not s3_url:
+        return None
+    # Extract S3 key from URL: https://<bucket>.s3.<region>.amazonaws.com/<key>
+    prefix = f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/"
+    if not s3_url.startswith(prefix):
+        return s3_url  # Not an S3 URL (e.g. placeholder), return as-is
+    key = s3_url[len(prefix):]
+    try:
+        s3 = boto3.client("s3", region_name=settings.AWS_REGION)
+        return s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": settings.S3_BUCKET, "Key": key},
+            ExpiresIn=3600,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to generate presigned URL for {key}: {e}")
+        return s3_url
 
 
 def _question_to_response(question: Question) -> QuestionResponse:
@@ -29,7 +51,7 @@ def _question_to_response(question: Question) -> QuestionResponse:
     return QuestionResponse(
         question_id=str(question.question_id),
         user_id=str(question.user_id),
-        photo_url=question.photo_url,
+        photo_url=_get_presigned_url(question.photo_url),
         recognized_text=question.recognized_text,
         confidence=question.confidence,
         subject=question.subject,

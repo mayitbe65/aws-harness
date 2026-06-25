@@ -10,7 +10,7 @@ export interface QuestionListResponse {
 }
 
 export interface CreateQuestionRequest {
-  photo_url: string
+  photo_url?: string
   recognized_text: string
   confidence: number
   subject: string

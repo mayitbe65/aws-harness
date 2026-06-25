@@ -86,19 +86,19 @@ class Snapshot(Base):
 
     # Timestamps
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
         index=True,
     )
 
     completed_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
     )  # Time when PDF generation completed
 
     expires_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         index=True,
     )  # Auto-delete after this time (default: 30 days)

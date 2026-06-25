@@ -55,17 +55,17 @@ class ReviewPlan(Base):
 
     # 复习进度
     last_error_time = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
     )  # 最后出错时间
 
     last_reviewed_time = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
     )  # 最后复习时间
 
     next_review_time = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
     )  # 下次复习推荐时间
 
@@ -84,13 +84,13 @@ class ReviewPlan(Base):
 
     # Timestamps
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

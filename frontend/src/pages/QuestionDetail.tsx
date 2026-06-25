@@ -1,162 +1,99 @@
-import React, { useState, useEffect, type FormEvent } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuestion } from '@/hooks/useQuestion'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import styles from '@/styles/QuestionDetail.module.css'
+
+const SUBJECT_LABELS: Record<string, string> = {
+  math: '数学',
+  physics: '物理',
+  chemistry: '化学',
+  biology: '生物',
+  english: '英语',
+}
 
 export const QuestionDetail: React.FC = () => {
   useAuthGuard()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [formData, setFormData] = useState({
-    recognized_text: '',
-    subject: 'math',
-    difficulty: 3,
-    tags: '',
-    needs_review: false,
-    review_notes: '',
-  })
-  const [isSaving, setIsSaving] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
   const questionId = id || ''
-  const { question, isLoading, error, update, delete: deleteQuestion } = useQuestion(questionId)
+  const { question, isLoading, error } = useQuestion(questionId)
 
-  useEffect(() => {
-    if (question) {
-       
-      setFormData({
-        recognized_text: question.recognized_text,
-        subject: question.subject,
-        difficulty: question.difficulty,
-        tags: question.tags || '',
-        needs_review: question.needs_review,
-        review_notes: question.review_notes || '',
-      })
-    }
-  }, [question])
-
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
-    e.preventDefault()
-    setIsSaving(true)
-    setSaveError(null)
-    try {
-      await update(formData)
-      navigate('/', { replace: true })
-    } catch (err) {
-      setSaveError('保存失败，请重试')
-      console.error('Save failed:', err)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async (): Promise<void> => {
-    if (!window.confirm('确认删除此题目？')) return
-    try {
-      await deleteQuestion()
-      navigate('/', { replace: true })
-    } catch (err) {
-      setSaveError('删除失败，请重试')
-      console.error('Delete failed:', err)
-    }
-  }
-
-  if (!id) return <div>Invalid question ID</div>
+  if (!id) return <div>无效的题目 ID</div>
   if (isLoading) return <div className={styles.loading}>加载中...</div>
   if (error) return <div className={styles.error}>{error}</div>
   if (!question) return <div>题目不存在</div>
 
   return (
     <div className={styles.container}>
-      <h1>编辑题目</h1>
+      <h1>题目详情</h1>
 
-      <img src={question.photo_url} alt="question" className={styles.image} />
+      {question.photo_url && (
+        <img
+          src={question.photo_url}
+          alt="question"
+          className={styles.image}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+        />
+      )}
 
-      {saveError && <div className={styles.error}>{saveError}</div>}
-
-      <form onSubmit={handleSubmit} className={styles.form}>
-        <div className={styles.group}>
-          <label>题目内容</label>
-          <textarea
-            value={formData.recognized_text}
-            onChange={(e) => setFormData({ ...formData, recognized_text: e.target.value })}
-            rows={5}
-            className={styles.textarea}
-          />
+      <div className={styles.infoSection}>
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>题目内容</span>
+          <p className={styles.infoValue}>{question.recognized_text}</p>
         </div>
 
-        <div className={styles.group}>
-          <label>科目</label>
-          <select
-            value={formData.subject}
-            onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-          >
-            <option value="math">数学</option>
-            <option value="physics">物理</option>
-            <option value="chemistry">化学</option>
-            <option value="biology">生物</option>
-            <option value="english">英语</option>
-          </select>
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>科目</span>
+          <span className={styles.infoValue}>
+            {SUBJECT_LABELS[question.subject] ?? question.subject}
+          </span>
         </div>
 
-        <div className={styles.group}>
-          <label>难度 (1-5)</label>
-          <input
-            type="range"
-            min="1"
-            max="5"
-            value={formData.difficulty}
-            onChange={(e) => setFormData({ ...formData, difficulty: parseInt(e.target.value, 10) })}
-          />
-          <span>{formData.difficulty}</span>
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>难度</span>
+          <span className={styles.infoValue}>
+            {'★'.repeat(question.difficulty)}{'☆'.repeat(5 - question.difficulty)}
+          </span>
         </div>
 
-        <div className={styles.group}>
-          <label>标签</label>
-          <input
-            type="text"
-            value={formData.tags}
-            onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-            placeholder="用逗号分隔多个标签"
-          />
-        </div>
-
-        <div className={styles.group}>
-          <label>
-            <input
-              type="checkbox"
-              checked={formData.needs_review}
-              onChange={(e) => setFormData({ ...formData, needs_review: e.target.checked })}
-            />
-            {' '}需要审核
-          </label>
-        </div>
-
-        {formData.needs_review && (
-          <div className={styles.group}>
-            <label>审核备注</label>
-            <textarea
-              value={formData.review_notes}
-              onChange={(e) => setFormData({ ...formData, review_notes: e.target.value })}
-              rows={3}
-            />
+        {question.tags && (
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>标签</span>
+            <div className={styles.tags}>
+              {question.tags.split(',').filter(Boolean).map((tag) => (
+                <span key={tag.trim()} className={styles.tag}>{tag.trim()}</span>
+              ))}
+            </div>
           </div>
         )}
 
-        <div className={styles.actions}>
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? '保存中...' : '保存'}
-          </button>
-          <button type="button" onClick={handleDelete}>
-            删除
-          </button>
-          <button type="button" onClick={() => navigate('/')}>
-            返回
-          </button>
+        <div className={styles.infoRow}>
+          <span className={styles.infoLabel}>错误次数</span>
+          <span className={styles.infoValue}>{question.error_count}</span>
         </div>
-      </form>
+
+        {question.needs_review && (
+          <div className={styles.reviewBadge}>需审核</div>
+        )}
+
+        {question.review_notes && (
+          <div className={styles.infoRow}>
+            <span className={styles.infoLabel}>审核备注</span>
+            <p className={styles.infoValue}>{question.review_notes}</p>
+          </div>
+        )}
+      </div>
+
+      <div className={styles.actions}>
+        <Link to={`/question/${id}/edit`} className={styles.editButton}>
+          编辑
+        </Link>
+        <button type="button" onClick={() => navigate('/')} className={styles.backButton}>
+          返回
+        </button>
+      </div>
     </div>
   )
 }

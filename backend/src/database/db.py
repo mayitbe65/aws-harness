@@ -12,16 +12,13 @@ from typing import AsyncGenerator
 from src.config import settings
 
 # Create async engine for PostgreSQL with asyncpg driver or SQLite with aiosqlite
+_is_sqlite = "sqlite" in settings.DATABASE_URL
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.APP_DEBUG,
     future=True,
-    connect_args={
-        "check_same_thread": False,
-    } if "sqlite" in settings.DATABASE_URL else {
-        "pool_pre_ping": True,
-        "pool_recycle": 3600,
-    },
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
+    **({} if _is_sqlite else {"pool_pre_ping": True, "pool_recycle": 3600}),
 )
 
 # Create async session factory

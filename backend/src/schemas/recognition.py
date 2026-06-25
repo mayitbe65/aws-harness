@@ -45,3 +45,4 @@ class RecognitionResponse(BaseModel):
         ...,
         description="Whether user should manually review before saving"
     )
+    photo_url: Optional[str] = Field(default=None, description="S3 URL of uploaded photo")

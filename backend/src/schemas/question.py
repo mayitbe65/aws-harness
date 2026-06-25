@@ -6,7 +6,7 @@ from datetime import datetime
 
 class CreateQuestionRequest(BaseModel):
     """创建题目请求 — 从拍照识别结果存储题目"""
-    photo_url: str = Field(..., min_length=5, description="Photo S3 URL or local path")
+    photo_url: Optional[str] = Field(default=None, description="Photo S3 URL or local path")
     recognized_text: str = Field(..., min_length=5, max_length=10000, description="OCR 识别结果")
     confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Vision API 可信度")
     subject: str = Field(default="math", description="Subject: math, physics, chemistry...")
@@ -28,7 +28,7 @@ class QuestionResponse(BaseModel):
     """题目响应模型"""
     question_id: str
     user_id: str
-    photo_url: str
+    photo_url: Optional[str] = None
     recognized_text: str
     confidence: float
     subject: str

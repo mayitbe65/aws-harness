@@ -13,6 +13,7 @@ export interface RecognitionResponse {
   result?: RecognitionResultData
   message: string
   needs_manual_review: boolean
+  photo_url?: string
 }
 
 export const recognitionService = {
